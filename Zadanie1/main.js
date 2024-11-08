@@ -1,23 +1,25 @@
-// Import the RequestHandler class from the other file
+// Load environment variables from .env file
+require('dotenv').config();
+
 const RequestHandler = require('./RequestHandler');
+const OpenAIHandler = require('./OpenAIHandler');
 
 /**
- * Main function to execute the question-answer process
- * This is the entry point of our application
+ * Main function to execute the complete question-answer process
  */
 async function main() {
     try {
-        // Create a new instance of RequestHandler with the target URL
-        const handler = new RequestHandler('https://xyz.ag3nts.org/');
-
-        // Process the complete flow of getting question and submitting answer
+        // Use API key from environment variables
+        const openaiHandler = new OpenAIHandler(process.env.OPENAI_API_KEY);
+        
+        // Create RequestHandler with OpenAI handler
+        const handler = new RequestHandler(process.env.SERVER_URL, openaiHandler);
+        // Process the complete flow
         const result = await handler.processQuestionAndAnswer();
         console.log('Process completed:', result);
     } catch (error) {
-        // Handle any errors that occur during the process
         console.error('Process failed:', error);
     }
 }
 
-// Execute the main function
 main();

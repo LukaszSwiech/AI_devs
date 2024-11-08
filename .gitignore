@@ -2,3 +2,8 @@
 gitSSH/
 Lekcje/
 Lekcje/
+node_modules/
+
+# Ignore config file with sensitive data
+Zadanie1/config.js
+Zadanie1/.env

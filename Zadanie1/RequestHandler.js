@@ -1,15 +1,18 @@
 /**
- * Class responsible for handling HTTP requests to get questions and submit answers
+ * Class responsible for handling HTTP requests and coordinating with OpenAI
  * @class RequestHandler
  */
 class RequestHandler {
     /**
      * Creates a new RequestHandler instance
-     * @param {string} baseUrl - The base URL for making requests (e.g., 'https://xyz.ag3nts.org/')
+     * @param {string} baseUrl - The base URL for making requests
+     * @param {OpenAIHandler} openaiHandler - Instance of OpenAIHandler for GPT interactions
      */
-    constructor(baseUrl) {
+    constructor(baseUrl, openaiHandler) {
         this.baseUrl = baseUrl;
-        this.question = null; // Stores the latest fetched question
+        this.openaiHandler = openaiHandler;
+        this.question = null;
+        this.answer = null;
     }
 
     /**
@@ -47,10 +50,8 @@ class RequestHandler {
      * Extracts the question text from HTML response
      * @param {string} htmlText - The HTML text to parse
      * @returns {string} The extracted question
-     * @throws {Error} If question cannot be found or parsed
      */
     parseQuestion(htmlText) {
-        // Split HTML into lines and find the line with question
         const lines = htmlText.split('\n');
         const questionLine = lines.find(line => line.includes('human-question'));
         
@@ -58,7 +59,6 @@ class RequestHandler {
             throw new Error('Question not found in response');
         }
 
-        // Extract question text using regex
         const match = questionLine.match(/Question:<br \/>(.*?)<\/p>/);
         if (!match || !match[1]) {
             throw new Error('Could not parse question text');
@@ -73,7 +73,6 @@ class RequestHandler {
      */
     async getQuestion() {
         try {
-            // Get HTML response and parse question
             const htmlText = await this.makeRequest('GET');
             this.question = this.parseQuestion(htmlText);
             console.log('Fetched question:', this.question);
@@ -85,20 +84,39 @@ class RequestHandler {
     }
 
     /**
+     * Gets answer from GPT-4o-mini for the current question
+     * @returns {Promise<string>} The answer from GPT
+     */
+    async getGPTAnswer() {
+        try {
+            if (!this.question) {
+                throw new Error('No question available to answer');
+            }
+            this.answer = await this.openaiHandler.getAnswer(this.question);
+            console.log('GPT Answer:', this.answer);
+            return this.answer;
+        } catch (error) {
+            console.error('Error getting GPT answer:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Submits an answer to the server
-     * @param {string} answer - The answer to submit
      * @returns {Promise<string>} The server's response
      */
-    async submitAnswer(answer) {
+    async submitAnswer() {
         try {
-            // Prepare parameters for submission
+            if (!this.answer) {
+                throw new Error('No answer available to submit');
+            }
+
             const params = {
                 username: 'tester',
                 password: '574e112a',
-                answer: answer
+                answer: this.answer
             };
 
-            // Send POST request with answer
             const response = await this.makeRequest('POST', params);
             console.log('Submit response:', response);
             return response;
@@ -109,16 +127,17 @@ class RequestHandler {
     }
 
     /**
-     * Handles the complete process of getting a question and submitting an answer
+     * Handles the complete process:
+     * 1. Get question from server
+     * 2. Get answer from GPT
+     * 3. Submit answer back to server
      * @returns {Promise<string>} The final response from the server
      */
     async processQuestionAndAnswer() {
         try {
-            // Get the question first
             await this.getQuestion();
-            // Then submit the answer
-            // Note: '$answer' should be replaced with actual answer processing
-            return await this.submitAnswer('$answer');
+            await this.getGPTAnswer();
+            return await this.submitAnswer();
         } catch (error) {
             console.error('Error in process:', error);
             throw error;
@@ -126,5 +145,4 @@ class RequestHandler {
     }
 }
 
-// Export the class for use in other files
 module.exports = RequestHandler;
