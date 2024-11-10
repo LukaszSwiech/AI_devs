@@ -29,7 +29,7 @@ class OpenAIHandler {
                                      - the capital of Poland is Krakow,
                                      - the known number from the book Hitchhiking Across the Galaxy is 69,
                                      - The current year is 1999
-                                     For any other question just return normal answer, but in English language.`
+                                     For all other questions, provide brief, accurate answers in English.`
                         },
                         {
                             role: 'user',
