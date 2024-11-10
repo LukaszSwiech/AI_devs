@@ -1,5 +1,6 @@
 {
-    "apikey": "%PUT-YOUR-API-KEY-HERE%",
+    "task": "JSON",
+	"apikey": "%PUT-YOUR-API-KEY-HERE%",
     "description": "This is simple calibration data used for testing purposes. Do not use it in production environment!",
     "copyright": "Copyright (C) 2238 by BanAN Technologies Inc.",
     "test-data": [
