@@ -5,5 +5,5 @@ Lekcje/
 node_modules/
 
 # Ignore config file with sensitive data
-Zadanie1/config.js
+**/config.js
 **/.env
