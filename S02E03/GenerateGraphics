@@ -1,0 +1,141 @@
+// Import required modules using ES Modules syntax
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fetch from 'node-fetch';
+import OpenAI from 'openai';
+import dotenv from 'dotenv';
+
+// Get current directory name using ES Modules approach
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure dotenv
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+// Store API keys and URLs from environment variables
+const APIKEY = process.env.APIKEY;
+const SERVER_URL = process.env.SERVER_URL;
+
+// Validate required environment variables
+if (!APIKEY || !SERVER_URL) {
+    throw new Error('Missing required environment variables. Please check your .env file.');
+}
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+/**
+ * Main function to orchestrate the entire process
+ */
+async function processRobotTask() {
+    try {
+        // Step 1: Fetch the initial description
+        console.log('\n=== Step 1: Fetching Initial Description ===');
+        console.log('Requesting from:', `${SERVER_URL}/data/${APIKEY}/robotid.json`);
+        
+        const descriptionResponse = await fetch(
+            `${SERVER_URL}/data/${APIKEY}/robotid.json`
+        );
+        
+        // Print raw response first
+        const rawResponse = await descriptionResponse.text();
+        console.log('\nRaw server response:', rawResponse);
+
+        // Parse the response
+        let descriptionData;
+        try {
+            descriptionData = JSON.parse(rawResponse);
+            console.log('\nParsed response data:', descriptionData);
+        } catch (e) {
+            throw new Error(`Failed to parse JSON response: ${e.message}`);
+        }
+        
+        // Changed from answer to description field
+        if (!descriptionData || !descriptionData.description) {
+            throw new Error('Response does not contain required "description" field');
+        }
+
+        const description = descriptionData.description;
+        console.log('\nExtracted description:', description);
+
+        // Additional validation for the description
+        if (typeof description !== 'string' || description.trim() === '') {
+            throw new Error('Description is empty or invalid');
+        }
+
+        // Step 2: Generate image using DALL-E
+        console.log('\n=== Step 2: Generating Image with DALL-E ===');
+        console.log('Sending prompt to DALL-E:', description);
+
+        const imageResponse = await openai.images.generate({
+            model: "dall-e-3",
+            prompt: description,
+            n: 1,
+            size: "1024x1024",
+            response_format: "url"
+        });
+
+        // Validate image response
+        if (!imageResponse || !imageResponse.data || !imageResponse.data[0] || !imageResponse.data[0].url) {
+            throw new Error('Invalid response from DALL-E');
+        }
+
+        const imageUrl = imageResponse.data[0].url;
+        console.log('Generated image URL:', imageUrl);
+
+        // Step 3: Submit the result back to server
+        console.log('\n=== Step 3: Submitting Result ===');
+        
+        // Create the request body
+        const jsonBody = JSON.stringify({
+            task: "robotid",
+            apikey: APIKEY,
+            answer: imageUrl
+        });
+        
+        // Log the JSON string that will be sent
+        console.log('\nRequest body (JSON string):', jsonBody);
+        console.log('\nSubmitting to URL:', `${SERVER_URL}/report`); // Log the URL we're sending to
+
+        const submitResponse = await fetch(`${SERVER_URL}/report`, { // Added /task to the URL
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: jsonBody
+        });
+
+        // Log response status before trying to parse JSON
+        console.log('Response status:', submitResponse.status);
+        
+        const submitResult = await submitResponse.json();
+        console.log('Submission result:', submitResult);
+
+    } catch (error) {
+        // Enhanced error handling
+        console.error('\n=== ERROR OCCURRED ===');
+        console.error('Error message:', error.message);
+        
+        if (error.response) {
+            console.error('Response status:', error.response.status);
+            try {
+                const errorText = await error.response.text();
+                console.error('Response data:', errorText);
+            } catch (e) {
+                console.error('Could not read error response:', e);
+            }
+        }
+        
+        console.error('Full error details:', JSON.stringify(error, null, 2));
+        throw error;
+    }
+}
+
+
+// Execute the main function
+console.log('Starting the process...');
+processRobotTask()
+    .then(() => console.log('\nProcess completed successfully'))
+    .catch(error => console.error('\nProcess failed:', error));
