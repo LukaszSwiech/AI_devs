@@ -1,7 +1,16 @@
+// Suppress the specific punycode deprecation warning
+process.removeListener('warning', console.warn);
+process.on('warning', (warning) => {
+    if (warning.name !== 'DeprecationWarning' || !warning.message.includes('punycode')) {
+        console.warn(warning);
+    }
+});
+
 // Import required dependencies
 import OpenAI from 'openai';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import path from 'path';
 
 // Initialize OpenAI client
 const client = new OpenAI();
@@ -24,42 +33,55 @@ async function encodeImage(imagePath) {
 }
 
 /**
- * Analyzes an image using OpenAI's Vision model
- * @param {string} imagePath - Path to the image file
- * @param {string} prompt - Question or prompt about the image
- * @returns {Promise<Object>} OpenAI API response
+ * Analyzes multiple images in a single API call
+ * @param {string[]} imagePaths - Array of paths to image files
+ * @returns {Promise<string>} OpenAI API response
  */
-async function analyzeImage(imagePath, prompt = "This image shows a picture of a piece of map. It is probably from some Polish city. You can read the names of the streets, and some other info like bus stops, cementary etc. Which city is this piece of map from? Return only the name of the city.") {
+async function analyzeImages(imagePaths) {
     try {
-        // Get base64 encoded image
-        const base64Image = await encodeImage(imagePath);
+        // Encode all images
+        console.log('Encoding images...');
+        const encodedImages = await Promise.all(
+            imagePaths.map(async (imagePath) => {
+                const base64Image = await encodeImage(imagePath);
+                return {
+                    type: "image_url",
+                    image_url: {
+                        url: `data:image/jpeg;base64,${base64Image}`
+                    }
+                };
+            })
+        );
 
-        // Create the API request
+        // Create content array with prompt and all images
+        const content = [
+            {
+                type: "text",
+                text: "Na podstawie dostarczonych fragmentów mapy, określ, z jakiego miasta one pochodzą. Trzy z nich dotycza tego samego miasta. Czwarty znalazl sie tam przypadkiem i pochodzi\
+                 z innego miasta, ktore nas nie interesuje. W tym miescie ktorego szukamy sa jakies spichlerze i twierdze.\
+                 Przed zwroceniem odpowiedzi, sprawdz, czy na pewno w wybranym miescie wystepuja wszystkie ulice odczytane z map. Sprawdz czy na pewno sie one przecinaja, dokladnie tak samo jak\
+                 zaprezentowano na mapie. \
+                 Sprawdz czy wystepuja wszystkie obiekty opisane na mapie (takie jak cmentarz, lewiatan itp). Zwroc nazwe miasta, z ktorego pochodza trzy z czterech prezentowanych fragmentow. Zaprezentuj swoj sposob myslenia."
+            },
+            ...encodedImages
+        ];
+
+        console.log('Sending request to OpenAI...');
+        // Create the API request with all images
         const response = await client.chat.completions.create({
-            model: "gpt-4o-mini",  // Current model name for vision tasks
+            model: "gpt-4o",
             messages: [
                 {
                     role: "user",
-                    content: [
-                        {
-                            type: "text",
-                            text: prompt
-                        },
-                        {
-                            type: "image_url",
-                            image_url: {
-                                url: `data:image/jpeg;base64,${base64Image}`
-                            }
-                        }
-                    ]
+                    content: content
                 }
             ],
-            max_tokens: 300
+            max_tokens: 1000
         });
 
-        return response.choices[0].message.content;  // Return just the content for simplicity
+        return response.choices[0].message.content;
     } catch (error) {
-        console.error('Error analyzing image:', error);
+        console.error('Error analyzing images:', error);
         throw error;
     }
 }
@@ -67,12 +89,21 @@ async function analyzeImage(imagePath, prompt = "This image shows a picture of a
 // Example usage with proper error handling
 const main = async () => {
     try {
-        // Update this path to point to your actual image
-        const imagePath = "S02E02/map1.png";
-        console.log('Analyzing image:', imagePath);
+        // Define all image paths
+        const imagePaths = [
+            'S02E02/map1.png',
+            'S02E02/map2.png',
+            'S02E02/map3.png',
+            'S02E02/map4.png'
+        ];
         
-        const result = await analyzeImage(imagePath);
-        console.log('Analysis result:', result);
+        console.log('Starting batch analysis of maps...\n');
+        const result = await analyzeImages(imagePaths);
+        
+        // Print results
+        console.log('\nAnalysis Results:');
+        console.log(result);
+        
     } catch (error) {
         console.error('Main execution error:', error);
         process.exit(1);
@@ -84,4 +115,4 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     main();
 }
 
-export { analyzeImage, encodeImage };
+export { analyzeImages, encodeImage };
