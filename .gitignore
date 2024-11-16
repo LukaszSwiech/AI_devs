@@ -7,3 +7,4 @@ node_modules/
 # Ignore config file with sensitive data
 **/config.js
 **/.env
+**/PLIKI_Z_FABRYKI/
