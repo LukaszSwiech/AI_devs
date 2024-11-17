@@ -1,0 +1,6 @@
+Poprawa stabilności transmisji: wykorzystanie dużych modeli językowych
+----------------------------------------------------------------------
+
+W dążeniu do zwiększenia stabilności transmisji danych oraz materii, zespół badawczy zdecydował się na zastosowanie dużych modeli językowych (LLM), które po odpowiednim fine-tuningu wykazują zdolność do automatycznej naprawy przesyłanych informacji.
+
+Modele te potrafią wypełnić brakujące bity w transmisji, korygować uszkodzone piksele w obrazach, a nawet – choć niezamierzenie – dodawać rodzynki do przesyłanego sernika co jest kolejnym przykładem emergencji. Dzięki zaawansowanym algorytmom naprawczym, udało się osiągnąć stabilność na poziomie 99,7%, co stanowi przełomowy wynik w zakresie przesyłania zarówno danych cyfrowych, jak i materii organicznej. Pomimo wysokiej skuteczności, sporadycznie pojawiają się tzw. halucynacje modelu, czyli niewielkie błędy interpretacyjne, które w przypadku przesyłu materii organicznej skutkują uszkodzeniem nie więcej niż 1-2 komórek. Na szczęście, te niegroźne zakłócenia mają minimalny wpływ na integralność przesyłanych obiektów i są łatwe do skorygowania, co otwiera perspektywę dalszych eksperymentów z wykorzystaniem LLM w transmisjach temporalnych.

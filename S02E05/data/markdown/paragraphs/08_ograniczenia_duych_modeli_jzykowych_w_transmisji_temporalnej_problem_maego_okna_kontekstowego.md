@@ -1,0 +1,6 @@
+Ograniczenia dużych modeli językowych w transmisji temporalnej: problem małego okna kontekstowego
+-------------------------------------------------------------------------------------------------
+
+Pomimo imponujących wyników, duże modele językowe (LLM) wykazują istotne ograniczenia w korekcji transmisji temporalnych, szczególnie gdy obiekt jest stosunkowo duży. Z powodu małego okna kontekstowego (współcześnie do 4096 tokenów), model nie jest w stanie skutecznie analizować i korygować kompleksowych struktur podczas transmisji, takich jak większe owoce, co ogranicza jego zastosowanie do mniejszych obiektów.
+
+W odpowiedzi na to wyzwanie, zespół badawczy przeprowadził testy na mniejszym owocu, aby sprawdzić, czy model zdoła osiągnąć wyższą precyzję korekcyjną. Wyniki były nadzwyczaj obiecujące – LLM wykonał transmisję bezbłędnie, a przy tym nie odnotowano uszkodzeń na poziomie komórkowym, co stanowi istotny krok w poprawie precyzji przesyłu mniejszych obiektów w czasie. Osiągnięcie to otwiera drogę do dalszych badań nad optymalizacją LLM, choć problem korekcji większych materiałów dalej pozostaje nierozwiązany.
