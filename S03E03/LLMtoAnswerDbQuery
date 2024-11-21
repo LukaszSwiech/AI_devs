@@ -1,0 +1,140 @@
+import dotenv from 'dotenv';
+import { dirname } from 'path';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import OpenAI from 'openai';
+import fetch from 'node-fetch';
+
+// Set up directory path and environment variables
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+const requiredEnvVars = {
+    'DBAPI_URL': process.env.DBAPI_URL,
+    'SERVER_URL': process.env.SERVER_URL,
+    'APIKEY': process.env.APIKEY
+};
+
+// Database schema information to send to OpenAI
+const dbSchema = `
+Tables Structure:
+1. connections:
+   - user1_id (int, PRIMARY KEY part 1)
+   - user2_id (int, PRIMARY KEY part 2)
+
+2. datacenters:
+   - dc_id (int)
+   - location (varchar(30))
+   - manager (int)
+   - is_active (int, default 0)
+
+3. users:
+   - id (int, AUTO_INCREMENT, PRIMARY KEY)
+   - username (varchar(20))
+   - access_level (varchar(20), default 'user')
+   - is_active (int, default 1)
+   - lastlog (date)
+`;
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+async function main() {
+  try {
+    // Get SQL query from OpenAI
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "You are a SQL expert. Provide only the raw SQL query as a single line without any formatting, markdown, or explanation. Do not use newlines, backticks, or SQL keywords."
+        },
+        {
+            role: "user",
+            content: `Given this database schema: ${dbSchema}
+            Create a SQL query to find active datacenter IDs (DC_ID) that are managed by employees who are on vacation (is_active=0).
+            Requirements:
+            - Return only dc_id from datacenters
+            - Join datacenters and users tables
+            - Match datacenters.manager with users.id
+            - Filter for active datacenters (is_active=1)
+            - Filter for inactive users (is_active=0)`
+        }
+      ]
+    });
+
+    const sqlQuery = completion.choices[0].message.content.trim();
+    console.log('Query from LLM:', sqlQuery);
+
+    // Create the request body
+    const requestBody = {
+        task: "database",
+        apikey: process.env.APIKEY,
+        query: sqlQuery
+      };
+  
+      // Log the request details
+      console.log('\n=== Request Details ===');
+      console.log('URL:', requiredEnvVars.DBAPI_URL);
+      console.log('Method: POST');
+      console.log('Headers:', { 'Content-Type': 'application/json' });
+      console.log('Request Body:', JSON.stringify(requestBody, null, 2));
+      console.log('=====================\n');
+
+    // Send query to the centrala API
+    const response = await fetch(requiredEnvVars.DBAPI_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+  
+      const data = await response.json();
+    // Enhanced response logging
+    console.log('\n=== API Response Details ===');
+    console.log('Full Response:', JSON.stringify(data, null, 2));
+    console.log('DC IDs Found:', data.reply.map(item => item.dc_id).join(', '));
+    console.log('Error Status:', data.error);
+    console.log('========================\n');
+  
+    // Extract dc_ids and prepare report request
+    const dcIds = data.reply.map(item => parseInt(item.dc_id));
+    const reportBody = {
+      task: "database",
+      apikey: process.env.APIKEY,
+      answer: dcIds
+    };
+
+    // Log report request details
+    console.log('\n=== Report Request Details ===');
+    console.log('URL:', `${process.env.SERVER_URL}/report`);
+    console.log('Method: POST');
+    console.log('Headers:', { 'Content-Type': 'application/json' });
+    console.log('Request Body:', JSON.stringify(reportBody, null, 2));
+    console.log('============================\n');
+
+    // Send report to the centrala
+    const reportResponse = await fetch(`${process.env.SERVER_URL}/report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(reportBody)
+    });
+
+    const reportData = await reportResponse.json();
+    
+    // Log report response
+    console.log('\n=== Report Response Details ===');
+    console.log('Response:', JSON.stringify(reportData, null, 2));
+    console.log('============================\n');
+
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }
+  
+  main();
