@@ -1,0 +1,222 @@
+import dotenv from 'dotenv';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fetch from 'node-fetch';
+import OpenAI from 'openai';
+
+// Configure directory path and load environment variables
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+// Sets to keep track of processed items
+const processedNames = new Set();
+const processedCities = new Set();
+const allNames = new Set();
+const allCities = new Set();
+
+// Function to remove Polish characters
+function removeDiacritics(text) {
+    const polishChars = {
+        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 
+        'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+        'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 
+        'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
+    };
+    
+    return text.split('').map(char => polishChars[char] || char).join('');
+}
+
+async function fetchInitialData() {
+    // Fetch initial data from the provided URL
+    const response = await fetch(`${process.env.SERVER_URL}/dane/barbara.txt`);
+    return await response.text();
+}
+
+async function extractNamesAndCities(text) {
+    // Use GPT-4 to extract names and cities from the text with improved context understanding
+    const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+            {
+                role: "system",
+                content: "You are a helpful assistant that extracts first names and cities from text and returns them in JSON format. For names, pay attention to the full context to determine the correct gender and form. Convert all names and cities to nominative form without Polish characters. For male names ending with '-a' (like Aleksandra), make sure to return the proper male form (Aleksander)."
+            },
+            {
+                role: "user",
+                content: `Carefully analyze the following text and extract first names (in their proper gender form) and cities. Return them as JSON with two arrays 'names' and 'cities'. Here's the text: ${text}`
+            }
+        ],
+        response_format: { type: "json_object" }
+    });
+
+    const result = JSON.parse(completion.choices[0].message.content);
+    // Remove Polish characters from extracted data
+    result.names = result.names.map(name => removeDiacritics(name.toUpperCase()));
+    result.cities = result.cities.map(city => removeDiacritics(city.toUpperCase()));
+    
+    console.log('Extracted data:', result);
+    return result;
+}
+
+async function queryPeople(name) {
+    // Send POST request to /people endpoint
+    const normalizedName = removeDiacritics(name.toUpperCase());
+    console.log(`Querying people endpoint with name: ${normalizedName}`);
+    
+    const response = await fetch(`${process.env.SERVER_URL}/people`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            apikey: process.env.APIKEY,
+            query: normalizedName
+        })
+    });
+    
+    const result = await response.json();
+    if (result.message) {
+        // Normalize cities from response
+        result.message = result.message.split(' ')
+            .map(city => removeDiacritics(city.toUpperCase()))
+            .join(' ');
+    }
+    console.log(`Response for ${normalizedName}:`, result);
+    return result;
+}
+
+async function queryPlaces(city) {
+    // Send POST request to /places endpoint
+    const normalizedCity = removeDiacritics(city.toUpperCase());
+    console.log(`Querying places endpoint with city: ${normalizedCity}`);
+    
+    const response = await fetch(`${process.env.SERVER_URL}/places`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            apikey: process.env.APIKEY,
+            query: normalizedCity
+        })
+    });
+    
+    const result = await response.json();
+    if (result.message) {
+        // Normalize names from response
+        result.message = result.message.split(' ')
+            .map(name => removeDiacritics(name.toUpperCase()))
+            .join(' ');
+    }
+    console.log(`Response for ${normalizedCity}:`, result);
+    return result;
+}
+
+async function submitReport(city) {
+    // Submit final report with the found city
+    const normalizedCity = removeDiacritics(city.toUpperCase());
+    console.log(`Submitting report with city: ${normalizedCity}`);
+    
+    const response = await fetch(`${process.env.SERVER_URL}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            task: "loop",
+            apikey: process.env.APIKEY,
+            answer: normalizedCity
+        })
+    });
+    
+    const result = await response.json();
+    console.log('Report submission result:', result);
+    return result;
+}
+
+async function processNewItems(items, type) {
+    // Add new items to the corresponding set if they haven't been processed
+    const set = type === 'names' ? allNames : allCities;
+    const processedSet = type === 'names' ? processedNames : processedCities;
+    
+    items.forEach(item => {
+        // Normalize item before adding to set
+        const normalizedItem = removeDiacritics(item.toUpperCase());
+        if (!set.has(normalizedItem)) {
+            console.log(`Found new ${type.slice(0, -1)}: ${normalizedItem}`);
+            set.add(normalizedItem);
+        }
+    });
+}
+
+async function main() {
+    try {
+        // Fetch and process initial data
+        console.log('Fetching initial data...');
+        const initialText = await fetchInitialData();
+        console.log('Extracting names and cities...');
+        const { names, cities } = await extractNamesAndCities(initialText);
+        
+        await processNewItems(names, 'names');
+        await processNewItems(cities, 'cities');
+
+        let barbaraFound = false;
+        let iterationCount = 0;
+        
+        while (!barbaraFound) {
+            iterationCount++;
+            console.log(`\nStarting iteration ${iterationCount}`);
+            
+            // Process unprocessed names
+            for (const name of allNames) {
+                if (!processedNames.has(name)) {
+                    const peopleResponse = await queryPeople(name);
+                    processedNames.add(name);
+                    
+                    if (peopleResponse.message) {
+                        const newCities = peopleResponse.message.split(' ');
+                        await processNewItems(newCities, 'cities');
+                    }
+                }
+            }
+
+            // Process unprocessed cities
+            for (const city of allCities) {
+                if (!processedCities.has(city)) {
+                    const placesResponse = await queryPlaces(city);
+                    processedCities.add(city);
+                    
+                    // Check if the response contains ONLY "BARBARA"
+                    if (placesResponse.message === "BARBARA") {
+                        console.log(`Found the correct city with only Barbara! The city is: ${city}`);
+                        await submitReport(city);
+                        barbaraFound = true;
+                        break;
+                    }
+                    
+                    if (placesResponse.message) {
+                        const newNames = placesResponse.message.split(' ');
+                        await processNewItems(newNames, 'names');
+                    }
+                }
+            }
+
+            // Check if we've processed everything without finding Barbara
+            if (!barbaraFound && 
+                processedNames.size === allNames.size && 
+                processedCities.size === allCities.size) {
+                console.log('Search completed without finding the correct city');
+                break;
+            }
+
+            console.log(`\nIteration ${iterationCount} stats:`);
+            console.log(`Total names: ${allNames.size}, Processed names: ${processedNames.size}`);
+            console.log(`Total cities: ${allCities.size}, Processed cities: ${processedCities.size}`);
+        }
+    } catch (error) {
+        console.error('An error occurred:', error);
+    }
+}
+
+// Start the program
+main().catch(console.error);
